@@ -8,25 +8,90 @@
 package org.eclipse.equinox.http.servlet.internal;
 
 import java.lang.reflect.*;
+import java.util.HashSet;
+import java.util.Set;
 import javax.servlet.ServletContext;
 
 class ServletContextProxyFactory extends Object {
 	private static final String PROXY_METHOD_TRACING_PROPERTY = "org.eclipse.equinox.http.servlet.internal.proxy.method.tracing"; //$NON-NLS-1$
 	private static final boolean PROXY_METHOD_TRACING = Boolean.getBoolean(ServletContextProxyFactory.PROXY_METHOD_TRACING_PROPERTY);
 
-	private MethodAdvisor methodAdvisor;
+	private static class MethodAdvisor extends Object {
+		private final Class subject;
+		private final Set methodsCache;
+		private final boolean methodCacheEnabled;
 
-	static ServletContext create(ServletContextAdaptor adapter) {
-		ServletContextProxyFactory factory = new ServletContextProxyFactory();
-		return factory.createServletContext(adapter);
+		// Property to turn off method caching.
+		private static final String DISABLE_METHOD_CACHE = "org.eclipse.equinox.http.servlet.internal.disable.method.cache"; //$NON-NLS-1$
+
+		private static boolean isMethodCacheEnabled() {
+			return Boolean.getBoolean(MethodAdvisor.DISABLE_METHOD_CACHE) == false;
+		}
+
+		MethodAdvisor(Class subject) {
+			super();
+			if (subject == null)
+				throw new IllegalArgumentException("subject must not be null"); //$NON-NLS-1$
+			if (subject.isInterface())
+				throw new IllegalArgumentException("subject must not be an interface"); //$NON-NLS-1$
+			this.subject = subject;
+			this.methodsCache = new HashSet(17);
+			this.methodCacheEnabled = MethodAdvisor.isMethodCacheEnabled();
+		}
+
+		private boolean hasValidModifiers(Method declaredMethod) {
+			int modifiers = declaredMethod.getModifiers();
+			boolean valid;
+			valid = Modifier.isPublic(modifiers);
+			if (valid == false)
+				return false;
+			valid = Modifier.isAbstract(modifiers) == false;
+			if (valid == false)
+				return false;
+			return true;
+		}
+
+		private boolean isImplemented(Class clazz, Method method) {
+			if (clazz == null)
+				return false;
+			Method[] declaredMethods = clazz.getDeclaredMethods();
+			for (int i = 0; i < declaredMethods.length; i++) {
+				Method declaredMethod = declaredMethods[i];
+				boolean valid = hasValidModifiers(declaredMethod);
+				if (valid == false)
+					continue;
+				boolean match = method.equals(declaredMethod);
+				if (match == false)
+					continue;
+				methodsCache.add(method);
+				return true; // Implemented and added to cache.
+			}
+			Class parent = clazz.getSuperclass();
+			return isImplemented(parent, method);
+		}
+
+		boolean isImplemented(Method method) {
+			if (method == null)
+				throw new IllegalArgumentException("method must not be null"); //$NON-NLS-1$
+			synchronized (methodsCache) {
+				if (methodCacheEnabled) {
+					boolean exists = methodsCache.contains(method);
+					if (exists)
+						return true; // Implemented and exists in cache.
+				}
+				return isImplemented(subject, method);
+			}
+		}
 	}
 
-	private ServletContextProxyFactory() {
+	private MethodAdvisor methodAdvisor;
+
+	ServletContextProxyFactory() {
 		super();
 		this.methodAdvisor = new MethodAdvisor(ServletContextAdaptor.class);
 	}
 
-	private ServletContext createServletContext(ServletContextAdaptor adapter) {
+	ServletContext create(ServletContextAdaptor adapter) {
 		if (adapter == null)
 			throw new IllegalArgumentException("adapter must not be null"); //$NON-NLS-1$
 		ClassLoader loader = ServletContextAdaptor.class.getClassLoader();
