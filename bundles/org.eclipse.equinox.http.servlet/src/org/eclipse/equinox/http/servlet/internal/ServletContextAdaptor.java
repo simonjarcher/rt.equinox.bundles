@@ -20,7 +20,7 @@ import java.util.*;
 import javax.servlet.*;
 import org.osgi.service.http.HttpContext;
 
-public class ServletContextAdaptor implements ServletContext {
+public class ServletContextAdaptor {
 
 	private ServletContext servletContext;
 	HttpContext httpContext;
