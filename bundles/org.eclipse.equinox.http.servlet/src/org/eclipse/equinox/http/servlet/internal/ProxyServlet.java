@@ -249,8 +249,8 @@ public class ProxyServlet extends HttpServlet {
 	}
 
 	private ServletContext createServletContextProxy(HttpContext httpContext) {
-		ServletContextAdaptor adapter = new ServletContextAdaptor(proxyContext, getServletContext(), httpContext, AccessController.getContext());
-		return ServletContextProxyFactory.create(adapter);
+		ServletContextAdaptor handler = new ServletContextAdaptor(proxyContext, getServletContext(), httpContext, AccessController.getContext());
+		return ServletContextProxyFactory.create(handler);
 	}
 
 	private int findFilterPriority(Dictionary initparams) {
